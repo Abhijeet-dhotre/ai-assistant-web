@@ -1,41 +1,27 @@
 # AI Voice Assistant
 
-A real-time voice assistant that listens, thinks, and speaks back — powered by Whisper, Groq, and Pocket TTS with WebSocket streaming.
+A conversational voice assistant that listens continuously, thinks, and speaks back — powered by Whisper, Groq, and Pocket TTS with WebSocket streaming.
 
-## Architecture
+## How It Works
+
+The assistant is **always listening**. Just speak naturally — it detects your voice, transcribes it, sends it to an LLM, and streams audio responses back in real time. If you start speaking while the assistant is talking, it **interrupts** itself and listens to you.
 
 ```
-Microphone / Audio File
-        |
-        v
-  ┌─────────────┐
-  │  WebSocket   │  (Frontend ↔ ws_server.py)
-  │  Connection  │
-  └──────┬──────┘
-         |
-    ┌────▼────┐     ┌──────────┐     ┌────────────┐
-    │ Whisper  │ ──► │  Groq    │ ──► │ Pocket TTS │
-    │ (STT)    │     │  (LLM)   │     │ (Speech)   │
-    └─────────┘     └──────────┘     └────────────┘
-         |               |                   |
-    Transcription   Streaming tokens    Audio chunks
-         |               |                   |
-         └───────────────┼───────────────────┘
-                         v
-                  Browser plays audio
-                   as it streams in
+You speak  ──►  Energy Detection  ──►  Whisper (STT)  ──►  Groq (LLM)  ──►  Pocket TTS  ──►  Audio plays
+                    │                                          │                    │
+              silence detected                          streaming tokens     sentence-by-sentence
+              after 800ms                               appear on screen     audio chunks
 ```
 
 ## Features
 
-- **Real-time streaming** — LLM tokens stream word-by-word, TTS audio plays sentence-by-sentence
-- **WebSocket pipeline** — single persistent connection, zero HTTP overhead
-- **Sentence pipelining** — TTS starts on each complete sentence while the LLM is still generating
-- **Audio queue** — browser auto-plays TTS chunks in order
-- **Voice recording** — record directly from the browser microphone
-- **File upload** — upload audio files if mic isn't available
-- **Drag & drop** — drop audio files onto the page
-- **Chat history** — conversation view with transcription and AI responses
+- **Always-on mic** — no button to press, detects speech automatically via energy-based VAD
+- **Interrupt support** — start speaking while the assistant is talking and it stops immediately
+- **Real-time streaming** — LLM text appears word-by-word, audio plays sentence-by-sentence
+- **WebSocket pipeline** — single persistent connection, minimal latency
+- **File upload** — upload audio files as an alternative to mic input
+- **Raw PCM capture** — mic audio encoded to WAV in the browser, no ffmpeg needed
+- **Debug console** — real-time log panel shows energy levels, state, and errors
 
 ## Tech Stack
 
@@ -51,12 +37,12 @@ Microphone / Audio File
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (for Pocket TTS)
-- [FFmpeg](https://ffmpeg.org/download.html) (for audio conversion)
-- Groq API key — get one free at [console.groq.com](https://console.groq.com)
+- [FFmpeg](https://ffmpeg.org/download.html) (used by Pocket TTS internally)
+- Groq API key — free at [console.groq.com](https://console.groq.com)
 
 ## Setup
 
-### 1. Clone the repo
+### 1. Clone
 
 ```bash
 git clone https://github.com/Abhijeet-dhotre/ai-assistant-web.git
@@ -69,26 +55,27 @@ cd ai-assistant-web
 # Option A: Environment variable
 export GROQ_API_KEY="your_groq_api_key_here"
 
-# Option B: Create a .env file
+# Option B: .env file
 cp .env.example .env
-# then edit .env and paste your key
+# edit .env and paste your key
 ```
 
-### 3. Install Python dependencies
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Run everything
+### 4. Run
 
-**Windows:**
+**Windows (one click):**
 ```batch
 run.bat
 ```
 
-**Manual (any OS):**
+This opens 3 windows: Pocket TTS, WebSocket server, Flask server. Then opens the browser.
 
+**Manual (any OS):**
 ```bash
 # Terminal 1 — Pocket TTS
 uvx pocket-tts serve --voice alba
@@ -100,51 +87,55 @@ python ws_server.py
 python server.py
 ```
 
-Then open [http://localhost:5050](http://localhost:5050) in your browser.
+Then open [http://localhost:5050](http://localhost:5050).
 
 ### Stop
 
-**Windows:**
-```batch
-stop.bat
-```
-
+**Windows:** `stop.bat`
 **Manual:** `Ctrl+C` in each terminal.
+
+## User Interface
+
+The app has a single screen with:
+- **Chat area** — shows transcription and AI responses
+- **Debug log** — real-time status (energy, state, errors)
+- **Mic orb** — color-coded status indicator:
+  - 🟢 Green = listening
+  - 🔴 Red = recording your speech
+  - 🟠 Orange = processing (STT → LLM → TTS)
+  - 🔵 Blue = speaking (click to interrupt)
+- **Upload button** — send audio files instead of mic
 
 ## Configuration
 
+### Voice Detection Sensitivity
+
+Edit these constants in the `<script>` section of `static/index.html`:
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `ENERGY_THRESHOLD` | `0.01` | RMS level to trigger speech (lower = more sensitive) |
+| `SILENCE_MS` | `800` | Milliseconds of silence to end speech |
+| `MIN_SPEECH_MS` | `300` | Ignore utterances shorter than this |
+
 ### Pocket TTS Voice
 
-Edit the `--voice` flag in `run.bat` or the serve command. Available voices:
-
-| Voice | Gender | Style |
-|-------|--------|-------|
-| `alba` | Female | Casual |
-| `marius` | Male | Reading |
-| `javert` | Male | Reading |
-| `jean` | Male | Reading |
-| `fantine` | Female | Reading |
-| `cosette` | Female | Reading |
-| `eponine` | Female | Reading |
-| `azelma` | Female | Reading |
-
-You can also pass a path to a `.wav` file for voice cloning.
+Edit `--voice` in `run.bat`. Available voices: `alba`, `marius`, `javert`, `jean`, `fantine`, `cosette`, `eponine`, `azelma`. You can also pass a path to a `.wav` file for voice cloning.
 
 ### Groq Model
 
-Edit `GROQ_MODEL` in `server.py` and `ws_server.py`. Available models:
-
-- `llama-3.3-70b-versatile` (default, best quality)
-- `llama-3.1-8b-instant` (faster, lower quality)
-- `mixtral-8x7b-32768`
+Edit `GROQ_MODEL` in `server.py` and `ws_server.py`:
+- `llama-3.3-70b-versatile` — best quality (default)
+- `llama-3.1-8b-instant` — faster, lower quality
 
 ### GPU Acceleration
 
-Set the environment variable before running:
-
+For Whisper:
 ```bash
 export USE_GPU=true
 ```
+
+Pocket TTS is CPU-optimized by design and runs faster on CPU than GPU for single requests.
 
 ## API Endpoints
 
@@ -153,25 +144,22 @@ export USE_GPU=true
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Serves the frontend |
-| GET | `/audio/<filename>` | Serves generated audio files |
 | GET | `/health` | Server health check |
-| POST | `/upload` | HTTP audio upload (legacy, non-streaming) |
+| POST | `/upload` | HTTP audio upload (non-streaming fallback) |
 
 ### WebSocket Server (port 5051)
 
 | Path | Description |
 |------|-------------|
-| `ws://localhost:5051/ws` | Real-time audio processing pipeline |
+| `ws://localhost:5051/ws` | Real-time audio pipeline |
 
-**WebSocket message flow:**
-
+**Message flow:**
 ```
-Client → Server:  binary audio data (WAV/WebM)
-Server → Client:  {"type": "status", "stage": "stt", "message": "Transcribing..."}
+Client → Server:  binary WAV data
+Server → Client:  {"type": "status", "stage": "stt"}
 Server → Client:  {"type": "transcription", "text": "Hello"}
-Server → Client:  {"type": "status", "stage": "llm", "message": "Thinking..."}
 Server → Client:  {"type": "llm_token", "token": "Hey"}
-Server → Client:  {"type": "llm_token", "token": " there"}
+Server → Client:  {"type": "llm_token", "token": " there!"}
 Server → Client:  {"type": "tts_audio", "index": 0, "audio_base64": "..."}
 Server → Client:  {"type": "done", "ai_response": "Hey there!"}
 ```
@@ -190,7 +178,7 @@ Server → Client:  {"type": "done", "ai_response": "Hey there!"}
 ├── server.py            # Flask server (static files, HTTP fallback)
 ├── ws_server.py         # FastAPI WebSocket server (real-time pipeline)
 ├── static/
-│   └── index.html       # Frontend (single-page app)
+│   └── index.html       # Frontend (continuous mic, VAD, streaming UI)
 ├── requirements.txt     # Python dependencies
 ├── run.bat              # Start everything (Windows)
 ├── stop.bat             # Kill all servers (Windows)
@@ -200,20 +188,23 @@ Server → Client:  {"type": "done", "ai_response": "Hey there!"}
 
 ## Troubleshooting
 
-**Microphone not working:**
+**Mic not working:**
 - Browsers require HTTPS or `localhost` for mic access
-- If accessing from another device on the network, use the upload button instead
+- Check the debug log at the bottom of the page
+- Use the upload button if mic is unavailable
+
+**No response after speaking:**
+- Check the debug log — it shows energy levels and state changes
+- Lower `ENERGY_THRESHOLD` if your mic is quiet
+- Make sure Pocket TTS is running on port 8000
 
 **Pocket TTS 404 error:**
-- Make sure Pocket TTS is running: `uvx pocket-tts serve --voice alba`
+- Ensure `uvx pocket-tts serve --voice alba` is running
 - Check that port 8000 is not blocked
 
 **Groq API error:**
-- Verify your API key is set: `echo %GROQ_API_KEY%` (Windows) or `echo $GROQ_API_KEY` (Linux/Mac)
-- Check your rate limits at [console.groq.com](https://console.groq.com)
-
-**FFmpeg not found:**
-- Install FFmpeg and add it to your PATH: [ffmpeg.org](https://ffmpeg.org/download.html)
+- Verify your API key: `echo %GROQ_API_KEY%`
+- Check rate limits at [console.groq.com](https://console.groq.com)
 
 ## License
 
