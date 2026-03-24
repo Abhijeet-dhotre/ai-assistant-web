@@ -110,10 +110,10 @@ async def ws_handler(ws: WebSocket):
 
             ts = _dt.now().strftime("%Y%m%d_%H%M%S_%f")
 
-            # ---- save audio ----
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-            tmp.write(raw)
-            tmp.close()
+            # ---- save WAV audio (already PCM-encoded by browser) ----
+            tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+            with open(tmp_wav, "wb") as f:
+                f.write(raw)
 
             await ws.send_json(
                 {"type": "status", "stage": "stt", "message": "Transcribing..."}
@@ -121,17 +121,17 @@ async def ws_handler(ws: WebSocket):
 
             # ---- STT ----
             try:
-                segments, _ = asr_model.transcribe(tmp.name, beam_size=5)
+                segments, _ = asr_model.transcribe(tmp_wav, beam_size=5)
                 user_text = " ".join(s.text for s in segments).strip()
             except Exception as e:
                 logger.error("STT error: %s", e)
                 await ws.send_json({"type": "error", "message": f"STT failed: {e}"})
-                os.unlink(tmp.name)
+                os.unlink(tmp_wav)
                 continue
 
             if not user_text:
                 await ws.send_json({"type": "error", "message": "No speech detected"})
-                os.unlink(tmp.name)
+                os.unlink(tmp_wav)
                 continue
 
             await ws.send_json({"type": "transcription", "text": user_text})
@@ -221,7 +221,7 @@ async def ws_handler(ws: WebSocket):
             except Exception as e:
                 logger.error("LLM error: %s", e)
                 await ws.send_json({"type": "error", "message": f"LLM failed: {e}"})
-                os.unlink(tmp.name)
+                os.unlink(tmp_wav)
                 continue
 
             # remaining text
@@ -240,7 +240,7 @@ async def ws_handler(ws: WebSocket):
                     )
 
             await ws.send_json({"type": "done", "ai_response": full_text})
-            os.unlink(tmp.name)
+            os.unlink(tmp_wav)
 
     except WebSocketDisconnect:
         logger.info("Client disconnected")

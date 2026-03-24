@@ -92,7 +92,19 @@
             padding: 12px 20px 24px; gap: 10px;
         }
 
-        /* Mic orb */
+        .controls-row {
+            display: flex; align-items: center; gap: 16px;
+        }
+
+        .upload-btn {
+            width: 40px; height: 40px; border-radius: 50%;
+            border: 2px solid #333; background: #111; color: #666;
+            font-size: 1rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease; outline: none;
+        }
+        .upload-btn:hover { border-color: #4caf50; color: #4caf50; }
+
         .mic-orb {
             width: 72px; height: 72px; border-radius: 50%;
             border: 3px solid #333; background: #111;
@@ -103,7 +115,6 @@
 
         .mic-orb .icon { font-size: 1.8rem; transition: color 0.3s; }
 
-        /* States */
         .mic-orb.state-init    { border-color: #555; }
         .mic-orb.state-init .icon { color: #555; }
 
@@ -120,7 +131,6 @@
 
         .mic-orb.state-speaking {
             border-color: #2196f3; box-shadow: 0 0 16px rgba(33,150,243,0.3);
-            cursor: pointer;
         }
         .mic-orb.state-speaking .icon { color: #2196f3; }
 
@@ -134,24 +144,12 @@
             70% { box-shadow: 0 0 0 14px rgba(255,152,0,0); }
         }
 
-        /* Energy ring */
-        .energy-ring {
-            position: absolute; inset: -6px; border-radius: 50%;
-            border: 2px solid transparent; transition: border-color 0.2s;
-            pointer-events: none;
-        }
-
-        .mic-orb.state-recording .energy-ring {
-            border-color: rgba(244,67,54,0.3);
-        }
-
-        /* Status label */
         .status-label {
             font-size: 0.78rem; color: #888; text-align: center;
             min-height: 1.2em; transition: color 0.2s;
         }
-        .status-label.recording { color: #f44336; }
-        .status-label.speaking  { color: #2196f3; }
+        .status-label.recording  { color: #f44336; }
+        .status-label.speaking   { color: #2196f3; }
         .status-label.processing { color: #ff9800; }
 
         .error-message {
@@ -161,9 +159,7 @@
             animation: fadeSlideIn 0.3s ease;
         }
 
-        .welcome {
-            text-align: center; padding: 50px 20px; color: #555;
-        }
+        .welcome { text-align: center; padding: 50px 20px; color: #555; }
         .welcome .icon { font-size: 3.5rem; margin-bottom: 12px; }
         .welcome p { font-size: 0.9rem; line-height: 1.6; }
 
@@ -197,10 +193,15 @@
 
     <div class="bottom-bar">
         <div class="status-label" id="statusLabel">Connecting...</div>
-        <button class="mic-orb state-init" id="micOrb" onclick="onOrbClick()">
-            <div class="energy-ring" id="energyRing"></div>
-            <span class="icon">&#127908;</span>
-        </button>
+        <div class="controls-row">
+            <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()" title="Upload audio file">
+                &#128190;
+            </button>
+            <button class="mic-orb state-init" id="micOrb" onclick="onOrbClick()">
+                <span class="icon">&#127908;</span>
+            </button>
+        </div>
+        <input type="file" id="fileInput" accept="audio/*,.wav,.mp3,.ogg,.webm,.m4a,.flac" style="display:none">
     </div>
 
     <script>
@@ -208,24 +209,29 @@
         const WS_PORT = 5051;
         const WS_URL  = `ws://${location.hostname}:${WS_PORT}/ws`;
 
-        const ENERGY_THRESHOLD = 20;     // RMS 0-255, tune for your mic
-        const SILENCE_MS       = 800;    // silence duration to end speech
-        const MIN_SPEECH_MS    = 400;    // ignore shorter utterances
-        const FFT_SIZE         = 512;
+        const ENERGY_THRESHOLD = 0.015;  // RMS 0-1 for Float32 PCM
+        const SILENCE_MS       = 800;
+        const MIN_SPEECH_MS    = 400;
+        const BUFFER_SECS      = 1.5;   // pre-roll buffer seconds
 
         // ================= STATE =================
-        // 'init' | 'idle' | 'recording' | 'processing' | 'speaking'
         let appState = 'init';
 
         let ws = null;
         let audioCtx = null;
-        let analyser = null;
+        let processor = null;
         let micStream = null;
-        let mediaRecorder = null;
-        let allChunks = [];        // every chunk from the always-on recorder
-        let speechStartIdx = -1;   // index of first chunk in current utterance
+
+        const SAMPLE_RATE = 16000;
+
+        // Rolling buffer of Float32Array chunks (pre-roll)
+        let allBuffers = [];
+        let totalSamples = 0;
+
+        let speechStartIdx = -1;
         let speechStartTime = 0;
         let lastSpeechTime = 0;
+        let silenceCount = 0;
 
         let audioQueue = [];
         let isPlaying = false;
@@ -235,12 +241,12 @@
         let startTime = null;
 
         // ================= ELEMENTS =================
-        const chatArea     = document.getElementById('chatArea');
-        const micOrb       = document.getElementById('micOrb');
-        const energyRing   = document.getElementById('energyRing');
-        const statusLabel  = document.getElementById('statusLabel');
-        const wsBadge      = document.getElementById('wsBadge');
-        const welcomeMsg   = document.getElementById('welcomeMsg');
+        const chatArea    = document.getElementById('chatArea');
+        const micOrb      = document.getElementById('micOrb');
+        const statusLabel = document.getElementById('statusLabel');
+        const wsBadge     = document.getElementById('wsBadge');
+        const welcomeMsg  = document.getElementById('welcomeMsg');
+        const fileInput   = document.getElementById('fileInput');
 
         // ================= HELPERS =================
 
@@ -248,32 +254,65 @@
             appState = s;
             micOrb.className = 'mic-orb state-' + s;
             statusLabel.className = 'status-label';
-
-            switch (s) {
-                case 'init':
-                    statusLabel.textContent = 'Starting microphone...';
-                    break;
-                case 'idle':
-                    statusLabel.textContent = 'Listening...';
-                    break;
-                case 'recording':
-                    statusLabel.textContent = 'Hearing you...';
-                    statusLabel.classList.add('recording');
-                    break;
-                case 'processing':
-                    statusLabel.textContent = 'Thinking...';
-                    statusLabel.classList.add('processing');
-                    break;
-                case 'speaking':
-                    statusLabel.textContent = 'Speaking... (click to interrupt)';
-                    statusLabel.classList.add('speaking');
-                    break;
-            }
+            const labels = {
+                init: 'Starting microphone...',
+                idle: 'Listening...',
+                recording: 'Hearing you...',
+                processing: 'Thinking...',
+                speaking: 'Speaking... (click orb to interrupt)',
+            };
+            statusLabel.textContent = labels[s] || '';
+            if (s === 'recording')  statusLabel.classList.add('recording');
+            if (s === 'speaking')   statusLabel.classList.add('speaking');
+            if (s === 'processing') statusLabel.classList.add('processing');
         }
 
-        function setWS(connected) {
+        function setWS(ok) {
             wsBadge.textContent = 'WS';
-            wsBadge.className = 'ws-badge ' + (connected ? 'on' : 'off');
+            wsBadge.className = 'ws-badge ' + (ok ? 'on' : 'off');
+        }
+
+        // ================= WAV ENCODER =================
+
+        function encodeWAV(float32, sampleRate) {
+            const numSamples = float32.length;
+            const buffer = new ArrayBuffer(44 + numSamples * 2);
+            const view = new DataView(buffer);
+
+            function writeStr(off, s) {
+                for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+            }
+
+            writeStr(0, 'RIFF');
+            view.setUint32(4, 36 + numSamples * 2, true);
+            writeStr(8, 'WAVE');
+            writeStr(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeStr(36, 'data');
+            view.setUint32(40, numSamples * 2, true);
+
+            let off = 44;
+            for (let i = 0; i < numSamples; i++) {
+                const s = Math.max(-1, Math.min(1, float32[i]));
+                view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                off += 2;
+            }
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        function concatBuffers(buffers) {
+            let total = 0;
+            for (const b of buffers) total += b.length;
+            const out = new Float32Array(total);
+            let off = 0;
+            for (const b of buffers) { out.set(b, off); off += b.length; }
+            return out;
         }
 
         // ================= WEBSOCKET =================
@@ -281,50 +320,33 @@
         function connectWS() {
             ws = new WebSocket(WS_URL);
             ws.binaryType = 'arraybuffer';
-
-            ws.onopen    = () => setWS(true);
-            ws.onclose   = () => { setWS(false); setTimeout(connectWS, 3000); };
-            ws.onerror   = () => {};
-
-            ws.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                handleWSMessage(msg);
-            };
+            ws.onopen  = () => setWS(true);
+            ws.onclose = () => { setWS(false); setTimeout(connectWS, 3000); };
+            ws.onerror = () => {};
+            ws.onmessage = (e) => handleWSMessage(JSON.parse(e.data));
         }
 
         function handleWSMessage(msg) {
             switch (msg.type) {
                 case 'status':
-                    if (msg.stage === 'tts') {
-                        statusLabel.textContent = msg.message;
-                    }
+                    if (msg.stage === 'tts') statusLabel.textContent = msg.message;
                     break;
-
                 case 'transcription':
-                    if (welcomeMsg) { welcomeMsg.style.display = 'none'; }
+                    if (welcomeMsg) welcomeMsg.style.display = 'none';
                     addMessage('user', msg.text);
                     break;
-
                 case 'llm_token':
                     appendStreamingText(msg.token);
                     break;
-
                 case 'tts_audio':
                     enqueueAudio(msg.audio_base64, msg.index);
                     break;
-
                 case 'done':
                     finalizeStreamingMessage();
-                    if (startTime) {
-                        addLatencyToLastMessage(((Date.now() - startTime) / 1000).toFixed(1));
-                    }
+                    if (startTime) addLatencyToLastMessage(((Date.now() - startTime) / 1000).toFixed(1));
                     startTime = null;
-                    // Don't change state here — audio queue will set idle when done
-                    if (audioQueue.length === 0 && !isPlaying) {
-                        setState('idle');
-                    }
+                    if (audioQueue.length === 0 && !isPlaying) setState('idle');
                     break;
-
                 case 'error':
                     addError(msg.message);
                     audioQueue = [];
@@ -354,9 +376,7 @@
         function enqueueAudio(b64, index) {
             const bytes = base64ToUint8(b64);
             const blob = new Blob([bytes], { type: 'audio/wav' });
-            const url  = URL.createObjectURL(blob);
-            audioQueue.push({ url, index });
-
+            audioQueue.push({ url: URL.createObjectURL(blob), index });
             if (!isPlaying) playNext();
         }
 
@@ -368,10 +388,8 @@
             }
             isPlaying = true;
             setState('speaking');
-
             audioQueue.sort((a, b) => a.index - b.index);
             const item = audioQueue.shift();
-
             currentAudio = new Audio(item.url);
             currentAudio.onended = () => { URL.revokeObjectURL(item.url); playNext(); };
             currentAudio.onerror = () => playNext();
@@ -392,79 +410,61 @@
             return arr;
         }
 
-        // ================= CONTINUOUS MIC =================
+        // ================= CONTINUOUS MIC (RAW PCM) =================
 
         async function startContinuousMic() {
             try {
-                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { sampleRate: SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true }
+                });
             } catch (err) {
-                addError('Microphone access denied. Please allow mic and reload.');
+                addError('Microphone access denied. Allow mic and reload.');
                 return;
             }
 
-            audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
             const src = audioCtx.createMediaStreamSource(micStream);
-            analyser  = audioCtx.createAnalyser();
-            analyser.fftSize = FFT_SIZE;
-            src.connect(analyser);
 
-            // Always-on recorder
-            const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-            mediaRecorder = new MediaRecorder(micStream, { mimeType: mime });
+            const bufSize = 4096;
+            processor = audioCtx.createScriptProcessor(bufSize, 1, 1);
 
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) allChunks.push(e.data);
-            };
+            let maxSamples = Math.floor(SAMPLE_RATE * BUFFER_SECS);
 
-            mediaRecorder.start(200); // 200ms timeslice
+            processor.onaudioprocess = (e) => {
+                const input = e.inputBuffer.getChannelData(0);
+                const buf = new Float32Array(input);
 
-            setState('idle');
-            monitorEnergy();
-        }
+                // Always keep pre-roll
+                allBuffers.push(buf);
+                totalSamples += buf.length;
 
-        function monitorEnergy() {
-            const data = new Uint8Array(analyser.frequencyBinCount);
-            const SILENCE_WINDOW = 8;  // consecutive low-energy frames to confirm silence
-            let silenceCount = 0;
-
-            function tick() {
-                if (appState === 'init' || appState === 'processing') {
-                    requestAnimationFrame(tick);
-                    return;
+                // Trim pre-roll to BUFFER_SECS
+                while (totalSamples > maxSamples && allBuffers.length > 1) {
+                    totalSamples -= allBuffers[0].length;
+                    allBuffers.shift();
                 }
 
-                analyser.getByteTimeDomainData(data);
-
-                // RMS energy
+                // Energy
                 let sum = 0;
-                for (let i = 0; i < data.length; i++) {
-                    const v = (data[i] - 128) / 128;
-                    sum += v * v;
-                }
-                const rms = Math.sqrt(sum / data.length) * 255;
+                for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+                const rms = Math.sqrt(sum / buf.length);
 
-                // Update energy ring visual
-                if (appState === 'recording') {
-                    const intensity = Math.min(rms / ENERGY_THRESHOLD, 2);
-                    energyRing.style.borderColor = `rgba(244,67,54,${0.15 + intensity * 0.2})`;
-                }
-
+                // Interrupt detection
                 if (appState === 'speaking' && rms > ENERGY_THRESHOLD) {
-                    // Interrupt: user started speaking while assistant is talking
                     interruptAndRecord();
-                    requestAnimationFrame(tick);
                     return;
                 }
 
+                // Start recording
                 if (appState === 'idle' && rms > ENERGY_THRESHOLD) {
-                    // Speech onset
-                    speechStartIdx = allChunks.length;
+                    speechStartIdx = allBuffers.length;
                     speechStartTime = Date.now();
                     lastSpeechTime = Date.now();
                     silenceCount = 0;
                     setState('recording');
                 }
 
+                // During recording
                 if (appState === 'recording') {
                     if (rms > ENERGY_THRESHOLD) {
                         lastSpeechTime = Date.now();
@@ -474,63 +474,67 @@
                     }
 
                     if (Date.now() - lastSpeechTime > SILENCE_MS) {
-                        // Silence detected — end utterance
-                        const duration = Date.now() - speechStartTime;
-                        if (duration >= MIN_SPEECH_MS) {
+                        if (Date.now() - speechStartTime >= MIN_SPEECH_MS) {
                             finishUtterance();
                         } else {
-                            // Too short, discard
+                            speechStartIdx = -1;
                             setState('idle');
                         }
                     }
                 }
+            };
 
-                requestAnimationFrame(tick);
-            }
+            // Connect: mic -> processor -> destination (needs connection for callback to fire)
+            src.connect(processor);
+            processor.connect(audioCtx.destination);
 
-            requestAnimationFrame(tick);
+            setState('idle');
         }
 
         function interruptAndRecord() {
             stopPlayback();
             finalizeStreamingMessage();
-
-            // Discard any in-flight processing result
-            speechStartIdx = allChunks.length;
+            // Clear buffer, start fresh
+            allBuffers = [];
+            totalSamples = 0;
+            speechStartIdx = 0;
             speechStartTime = Date.now();
             lastSpeechTime = Date.now();
+            silenceCount = 0;
             setState('recording');
         }
 
         function finishUtterance() {
-            if (speechStartIdx < 0 || speechStartIdx >= allChunks.length) {
+            if (speechStartIdx < 0 || speechStartIdx >= allBuffers.length) {
                 setState('idle');
                 return;
             }
 
-            const chunks = allChunks.slice(speechStartIdx);
+            const speechBuffers = allBuffers.slice(speechStartIdx);
             speechStartIdx = -1;
 
-            if (chunks.length === 0) {
+            if (speechBuffers.length === 0) {
                 setState('idle');
                 return;
             }
 
-            const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+            const pcm = concatBuffers(speechBuffers);
+            const wav = encodeWAV(pcm, SAMPLE_RATE);
 
-            // Trim old chunks to keep memory low (keep last 2 seconds worth ≈ 10 chunks at 200ms)
-            if (allChunks.length > 20) {
-                allChunks = allChunks.slice(-10);
-            }
+            // Keep a small pre-roll for next utterance
+            const keep = Math.min(3, allBuffers.length);
+            allBuffers = allBuffers.slice(-keep);
+            totalSamples = 0;
+            for (const b of allBuffers) totalSamples += b.length;
 
             setState('processing');
             startTime = Date.now();
-            sendAudio(blob);
+            sendWav(wav);
         }
 
         // ================= SEND =================
 
-        async function sendAudio(blob) {
+        async function sendWav(blob) {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 addError('Not connected');
                 setState('idle');
@@ -545,11 +549,52 @@
             }
         }
 
+        // ================= FILE UPLOAD =================
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            fileInput.value = '';
+
+            if (appState === 'speaking') {
+                stopPlayback();
+                finalizeStreamingMessage();
+            }
+
+            setState('processing');
+            startTime = Date.now();
+
+            try {
+                const arrayBuf = await file.arrayBuffer();
+                let wavBlob;
+
+                if (file.name.endsWith('.wav')) {
+                    wavBlob = file;
+                } else {
+                    // Decode to PCM then re-encode as WAV
+                    const tmpCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+                    const audioBuf = await tmpCtx.decodeAudioData(arrayBuf);
+                    const pcm = audioBuf.getChannelData(0);
+                    wavBlob = encodeWAV(pcm, SAMPLE_RATE);
+                    tmpCtx.close();
+                }
+
+                await sendWav(wavBlob);
+            } catch (err) {
+                addError('File error: ' + err.message);
+                setState('idle');
+            }
+        });
+
         // ================= ORB CLICK =================
 
         function onOrbClick() {
             if (appState === 'speaking') {
-                interruptAndRecord();
+                stopPlayback();
+                finalizeStreamingMessage();
+                allBuffers = [];
+                totalSamples = 0;
+                setState('idle');
             }
         }
 
