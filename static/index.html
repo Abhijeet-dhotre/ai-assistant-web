@@ -19,52 +19,48 @@
 
         header {
             width: 100%;
-            padding: 20px;
+            padding: 16px 20px;
             text-align: center;
             background: linear-gradient(135deg, #1a1a2e, #16213e);
             border-bottom: 1px solid #2a2a4a;
         }
 
-        header h1 { font-size: 1.5rem; font-weight: 600; color: #fff; letter-spacing: 1px; }
-        header p { font-size: 0.85rem; color: #888; margin-top: 4px; }
+        header h1 { font-size: 1.4rem; font-weight: 600; color: #fff; letter-spacing: 1px; }
 
-        .status-bar {
-            display: flex; align-items: center; justify-content: center;
-            gap: 8px; padding: 10px 20px; font-size: 0.8rem; color: #aaa;
+        header .sub {
+            font-size: 0.8rem; color: #888; margin-top: 4px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
         }
 
-        .status-dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: #4caf50; animation: pulse-dot 2s infinite;
+        .ws-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 0.5px;
         }
-        .status-dot.error { background: #f44336; animation: none; }
-        .status-dot.busy { background: #ff9800; animation: pulse-dot 0.5s infinite; }
-
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
-        }
+        .ws-badge.on  { background: #1b3a1b; color: #4caf50; }
+        .ws-badge.off { background: #3a1b1b; color: #f44336; }
 
         .main-container {
             flex: 1; width: 100%; max-width: 700px;
-            display: flex; flex-direction: column; padding: 20px;
+            display: flex; flex-direction: column; padding: 16px 20px;
         }
 
         .chat-area {
-            flex: 1; overflow-y: auto; padding: 10px 0;
-            display: flex; flex-direction: column; gap: 16px; min-height: 300px;
+            flex: 1; overflow-y: auto; padding: 8px 0;
+            display: flex; flex-direction: column; gap: 14px;
+            min-height: 200px;
         }
-        .chat-area::-webkit-scrollbar { width: 6px; }
+        .chat-area::-webkit-scrollbar { width: 5px; }
         .chat-area::-webkit-scrollbar-track { background: transparent; }
         .chat-area::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 
         .message {
-            max-width: 85%; padding: 14px 18px; border-radius: 16px;
-            font-size: 0.95rem; line-height: 1.5;
+            max-width: 85%; padding: 12px 16px; border-radius: 14px;
+            font-size: 0.93rem; line-height: 1.5;
             animation: fadeSlideIn 0.3s ease;
         }
 
         @keyframes fadeSlideIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -81,114 +77,100 @@
         }
 
         .message .label {
-            font-size: 0.7rem; text-transform: uppercase;
-            letter-spacing: 1px; margin-bottom: 6px; opacity: 0.6;
+            font-size: 0.65rem; text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 4px; opacity: 0.5;
         }
 
         .message .text { word-wrap: break-word; }
-        .message .latency { font-size: 0.7rem; color: #666; margin-top: 6px; }
+        .message .latency { font-size: 0.65rem; color: #555; margin-top: 4px; }
 
-        .controls {
-            display: flex; flex-direction: column;
-            align-items: center; padding: 20px 0; gap: 12px;
+        /* ---- Bottom bar ---- */
+
+        .bottom-bar {
+            width: 100%; max-width: 700px;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 12px 20px 24px; gap: 10px;
         }
 
-        .controls-row {
-            display: flex; align-items: center; gap: 20px;
-        }
-
-        .mic-button {
-            width: 80px; height: 80px; border-radius: 50%;
-            border: 3px solid #333; background: #1a1a2e; color: #fff;
-            font-size: 2rem; cursor: pointer;
+        /* Mic orb */
+        .mic-orb {
+            width: 72px; height: 72px; border-radius: 50%;
+            border: 3px solid #333; background: #111;
             display: flex; align-items: center; justify-content: center;
-            transition: all 0.2s ease; outline: none;
+            cursor: pointer; transition: all 0.3s ease; outline: none;
+            position: relative;
         }
 
-        .mic-button:hover { border-color: #1a73e8; background: #1e2a4a; transform: scale(1.05); }
-        .mic-button.recording { border-color: #f44336; background: #2a1010; animation: pulse-ring 1.5s infinite; }
-        .mic-button.recording .mic-icon { color: #f44336; }
-        .mic-button.processing { border-color: #ff9800; pointer-events: none; }
-        .mic-button.disabled { border-color: #333; opacity: 0.4; cursor: not-allowed; }
+        .mic-orb .icon { font-size: 1.8rem; transition: color 0.3s; }
 
-        @keyframes pulse-ring {
-            0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.4); }
-            70% { box-shadow: 0 0 0 20px rgba(244,67,54,0); }
-            100% { box-shadow: 0 0 0 0 rgba(244,67,54,0); }
+        /* States */
+        .mic-orb.state-init    { border-color: #555; }
+        .mic-orb.state-init .icon { color: #555; }
+
+        .mic-orb.state-idle    { border-color: #4caf50; box-shadow: 0 0 12px rgba(76,175,80,0.25); }
+        .mic-orb.state-idle .icon { color: #4caf50; }
+
+        .mic-orb.state-recording {
+            border-color: #f44336; animation: pulse-rec 1s infinite;
+        }
+        .mic-orb.state-recording .icon { color: #f44336; }
+
+        .mic-orb.state-processing { border-color: #ff9800; animation: pulse-proc 1.5s infinite; }
+        .mic-orb.state-processing .icon { color: #ff9800; }
+
+        .mic-orb.state-speaking {
+            border-color: #2196f3; box-shadow: 0 0 16px rgba(33,150,243,0.3);
+            cursor: pointer;
+        }
+        .mic-orb.state-speaking .icon { color: #2196f3; }
+
+        @keyframes pulse-rec {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(244,67,54,0.4); }
+            70% { box-shadow: 0 0 0 18px rgba(244,67,54,0); }
         }
 
-        .mic-icon { font-size: 2rem; color: #aaa; transition: color 0.2s; }
-        .mic-label { font-size: 0.8rem; color: #666; text-align: center; }
-
-        .recording-timer {
-            font-size: 0.9rem; color: #f44336;
-            font-variant-numeric: tabular-nums; display: none;
-        }
-        .recording-timer.active { display: block; }
-
-        .waveform { display: none; gap: 3px; align-items: center; height: 30px; }
-        .waveform.active { display: flex; }
-        .waveform .bar {
-            width: 3px; background: #f44336; border-radius: 2px;
-            animation: wave 0.8s ease-in-out infinite;
-        }
-        .waveform .bar:nth-child(1) { animation-delay: 0.0s; height: 10px; }
-        .waveform .bar:nth-child(2) { animation-delay: 0.1s; height: 20px; }
-        .waveform .bar:nth-child(3) { animation-delay: 0.2s; height: 15px; }
-        .waveform .bar:nth-child(4) { animation-delay: 0.3s; height: 25px; }
-        .waveform .bar:nth-child(5) { animation-delay: 0.1s; height: 18px; }
-        .waveform .bar:nth-child(6) { animation-delay: 0.4s; height: 22px; }
-        .waveform .bar:nth-child(7) { animation-delay: 0.2s; height: 12px; }
-
-        @keyframes wave {
-            0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1.5); }
+        @keyframes pulse-proc {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255,152,0,0.3); }
+            70% { box-shadow: 0 0 0 14px rgba(255,152,0,0); }
         }
 
-        .upload-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-
-        .upload-btn {
-            width: 56px; height: 56px; border-radius: 50%;
-            border: 2px solid #333; background: #1a1a2e; color: #aaa;
-            font-size: 1.4rem; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.2s ease; outline: none;
+        /* Energy ring */
+        .energy-ring {
+            position: absolute; inset: -6px; border-radius: 50%;
+            border: 2px solid transparent; transition: border-color 0.2s;
+            pointer-events: none;
         }
-        .upload-btn:hover { border-color: #4caf50; background: #1a2e1a; color: #4caf50; transform: scale(1.05); }
-        .upload-btn.processing { border-color: #ff9800; pointer-events: none; }
 
-        .upload-label { font-size: 0.7rem; color: #555; }
+        .mic-orb.state-recording .energy-ring {
+            border-color: rgba(244,67,54,0.3);
+        }
+
+        /* Status label */
+        .status-label {
+            font-size: 0.78rem; color: #888; text-align: center;
+            min-height: 1.2em; transition: color 0.2s;
+        }
+        .status-label.recording { color: #f44336; }
+        .status-label.speaking  { color: #2196f3; }
+        .status-label.processing { color: #ff9800; }
 
         .error-message {
             background: #2a1010; border: 1px solid #5a2020;
-            color: #f44336; padding: 10px 16px; border-radius: 8px;
-            font-size: 0.85rem; text-align: center;
+            color: #f44336; padding: 10px 14px; border-radius: 8px;
+            font-size: 0.82rem; text-align: center;
             animation: fadeSlideIn 0.3s ease;
         }
 
-        .welcome { text-align: center; padding: 60px 20px; color: #555; }
-        .welcome .icon { font-size: 4rem; margin-bottom: 16px; }
-        .welcome p { font-size: 0.95rem; line-height: 1.6; }
-
-        .divider { font-size: 0.75rem; color: #444; }
-
-        .ws-badge {
-            display: inline-block; padding: 2px 8px; border-radius: 10px;
-            font-size: 0.65rem; font-weight: 600; letter-spacing: 0.5px;
+        .welcome {
+            text-align: center; padding: 50px 20px; color: #555;
         }
-        .ws-badge.connected { background: #1b3a1b; color: #4caf50; }
-        .ws-badge.disconnected { background: #3a1b1b; color: #f44336; }
-
-        .stage-indicator {
-            font-size: 0.75rem; color: #888; text-align: center;
-            min-height: 1.2em; transition: color 0.2s;
-        }
-        .stage-indicator.active { color: #ff9800; }
+        .welcome .icon { font-size: 3.5rem; margin-bottom: 12px; }
+        .welcome p { font-size: 0.9rem; line-height: 1.6; }
 
         @media (max-width: 480px) {
-            header h1 { font-size: 1.2rem; }
-            .message { max-width: 92%; padding: 12px 14px; font-size: 0.9rem; }
-            .mic-button { width: 70px; height: 70px; }
-            .upload-btn { width: 48px; height: 48px; font-size: 1.2rem; }
+            header h1 { font-size: 1.15rem; }
+            .message { max-width: 92%; padding: 10px 13px; font-size: 0.88rem; }
+            .mic-orb { width: 64px; height: 64px; }
         }
     </style>
 </head>
@@ -196,88 +178,103 @@
 
     <header>
         <h1>AI Voice Assistant</h1>
-        <p>Whisper + Groq + Pocket TTS
-            <span class="ws-badge disconnected" id="wsBadge">WS</span>
-        </p>
+        <div class="sub">
+            Whisper + Groq + Pocket TTS
+            <span class="ws-badge off" id="wsBadge">WS</span>
+        </div>
     </header>
-
-    <div class="status-bar">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">Connecting...</span>
-    </div>
 
     <div class="main-container">
         <div class="chat-area" id="chatArea">
             <div class="welcome" id="welcomeMsg">
                 <div class="icon">&#127908;</div>
-                <p>Tap the microphone to speak, or upload an audio file.<br>
-                Responses stream in real-time via WebSocket.</p>
+                <p>Always listening. Just speak naturally.<br>
+                I'll hear you, think, and talk back.<br>
+                Click the orb while I'm speaking to interrupt.</p>
             </div>
         </div>
+    </div>
 
-        <div class="controls">
-            <div class="recording-timer" id="recordingTimer">0:00</div>
-            <div class="waveform" id="waveform">
-                <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-                <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-                <div class="bar"></div>
-            </div>
-            <div class="stage-indicator" id="stageIndicator"></div>
-            <div class="controls-row">
-                <div class="upload-area">
-                    <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
-                        &#128190;
-                    </button>
-                    <div class="upload-label">Upload</div>
-                </div>
-                <div class="divider">or</div>
-                <div class="upload-area">
-                    <button class="mic-button" id="micButton" onclick="toggleRecording()">
-                        <span class="mic-icon">&#127908;</span>
-                    </button>
-                    <div class="mic-label" id="micLabel">Tap to speak</div>
-                </div>
-            </div>
-            <input type="file" id="fileInput" accept="audio/*,.wav,.mp3,.ogg,.webm,.m4a,.flac" style="display:none">
-        </div>
+    <div class="bottom-bar">
+        <div class="status-label" id="statusLabel">Connecting...</div>
+        <button class="mic-orb state-init" id="micOrb" onclick="onOrbClick()">
+            <div class="energy-ring" id="energyRing"></div>
+            <span class="icon">&#127908;</span>
+        </button>
     </div>
 
     <script>
         // ================= CONFIG =================
         const WS_PORT = 5051;
-        const WS_URL = `ws://${location.hostname}:${WS_PORT}/ws`;
+        const WS_URL  = `ws://${location.hostname}:${WS_PORT}/ws`;
+
+        const ENERGY_THRESHOLD = 20;     // RMS 0-255, tune for your mic
+        const SILENCE_MS       = 800;    // silence duration to end speech
+        const MIN_SPEECH_MS    = 400;    // ignore shorter utterances
+        const FFT_SIZE         = 512;
 
         // ================= STATE =================
+        // 'init' | 'idle' | 'recording' | 'processing' | 'speaking'
+        let appState = 'init';
+
         let ws = null;
+        let audioCtx = null;
+        let analyser = null;
+        let micStream = null;
         let mediaRecorder = null;
-        let audioChunks = [];
-        let isRecording = false;
-        let recordingStartTime = null;
-        let timerInterval = null;
-        let micAvailable = true;
-        let startTime = null;
+        let allChunks = [];        // every chunk from the always-on recorder
+        let speechStartIdx = -1;   // index of first chunk in current utterance
+        let speechStartTime = 0;
+        let lastSpeechTime = 0;
 
-        // Audio queue for sequential playback
-        const audioQueue = [];
+        let audioQueue = [];
         let isPlaying = false;
-
-        // Current streaming message
+        let currentAudio = null;
         let currentMsgDiv = null;
         let currentMsgText = '';
+        let startTime = null;
 
         // ================= ELEMENTS =================
-        const chatArea = document.getElementById('chatArea');
-        const micButton = document.getElementById('micButton');
-        const micLabel = document.getElementById('micLabel');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
-        const recordingTimer = document.getElementById('recordingTimer');
-        const waveform = document.getElementById('waveform');
-        const welcomeMsg = document.getElementById('welcomeMsg');
-        const fileInput = document.getElementById('fileInput');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const wsBadge = document.getElementById('wsBadge');
-        const stageIndicator = document.getElementById('stageIndicator');
+        const chatArea     = document.getElementById('chatArea');
+        const micOrb       = document.getElementById('micOrb');
+        const energyRing   = document.getElementById('energyRing');
+        const statusLabel  = document.getElementById('statusLabel');
+        const wsBadge      = document.getElementById('wsBadge');
+        const welcomeMsg   = document.getElementById('welcomeMsg');
+
+        // ================= HELPERS =================
+
+        function setState(s) {
+            appState = s;
+            micOrb.className = 'mic-orb state-' + s;
+            statusLabel.className = 'status-label';
+
+            switch (s) {
+                case 'init':
+                    statusLabel.textContent = 'Starting microphone...';
+                    break;
+                case 'idle':
+                    statusLabel.textContent = 'Listening...';
+                    break;
+                case 'recording':
+                    statusLabel.textContent = 'Hearing you...';
+                    statusLabel.classList.add('recording');
+                    break;
+                case 'processing':
+                    statusLabel.textContent = 'Thinking...';
+                    statusLabel.classList.add('processing');
+                    break;
+                case 'speaking':
+                    statusLabel.textContent = 'Speaking... (click to interrupt)';
+                    statusLabel.classList.add('speaking');
+                    break;
+            }
+        }
+
+        function setWS(connected) {
+            wsBadge.textContent = 'WS';
+            wsBadge.className = 'ws-badge ' + (connected ? 'on' : 'off');
+        }
 
         // ================= WEBSOCKET =================
 
@@ -285,21 +282,9 @@
             ws = new WebSocket(WS_URL);
             ws.binaryType = 'arraybuffer';
 
-            ws.onopen = () => {
-                wsBadge.textContent = 'WS';
-                wsBadge.className = 'ws-badge connected';
-                setStatus('Ready');
-            };
-
-            ws.onclose = () => {
-                wsBadge.className = 'ws-badge disconnected';
-                setStatus('Disconnected', 'error');
-                setTimeout(connectWS, 3000);
-            };
-
-            ws.onerror = () => {
-                setStatus('WS error', 'error');
-            };
+            ws.onopen    = () => setWS(true);
+            ws.onclose   = () => { setWS(false); setTimeout(connectWS, 3000); };
+            ws.onerror   = () => {};
 
             ws.onmessage = (e) => {
                 const msg = JSON.parse(e.data);
@@ -310,14 +295,13 @@
         function handleWSMessage(msg) {
             switch (msg.type) {
                 case 'status':
-                    setStage(msg.message, true);
-                    if (msg.stage === 'stt') setStatus('Transcribing...', 'busy');
-                    if (msg.stage === 'llm') setStatus('Thinking...', 'busy');
-                    if (msg.stage === 'tts') setStatus('Speaking...', 'busy');
+                    if (msg.stage === 'tts') {
+                        statusLabel.textContent = msg.message;
+                    }
                     break;
 
                 case 'transcription':
-                    if (welcomeMsg) welcomeMsg.style.display = 'none';
+                    if (welcomeMsg) { welcomeMsg.style.display = 'none'; }
                     addMessage('user', msg.text);
                     break;
 
@@ -331,18 +315,21 @@
 
                 case 'done':
                     finalizeStreamingMessage();
-                    const latency = startTime ? ((Date.now() - startTime) / 1000).toFixed(1) : '?';
-                    addLatencyToLastMessage(latency);
-                    setStage('');
-                    setStatus('Ready');
-                    resetButtons();
+                    if (startTime) {
+                        addLatencyToLastMessage(((Date.now() - startTime) / 1000).toFixed(1));
+                    }
+                    startTime = null;
+                    // Don't change state here — audio queue will set idle when done
+                    if (audioQueue.length === 0 && !isPlaying) {
+                        setState('idle');
+                    }
                     break;
 
                 case 'error':
                     addError(msg.message);
-                    setStatus('Error', 'error');
-                    setStage('');
-                    resetButtons();
+                    audioQueue = [];
+                    stopPlayback();
+                    setState('idle');
                     break;
             }
         }
@@ -350,12 +337,10 @@
         // ================= STREAMING TEXT =================
 
         function appendStreamingText(token) {
-            if (!currentMsgDiv) {
-                currentMsgDiv = createMessageShell('assistant');
-            }
+            if (!currentMsgDiv) currentMsgDiv = createMessageShell('assistant');
             currentMsgText += token;
-            const textEl = currentMsgDiv.querySelector('.text');
-            if (textEl) textEl.textContent = currentMsgText;
+            const el = currentMsgDiv.querySelector('.text');
+            if (el) el.textContent = currentMsgText;
             chatArea.scrollTop = chatArea.scrollHeight;
         }
 
@@ -369,46 +354,35 @@
         function enqueueAudio(b64, index) {
             const bytes = base64ToUint8(b64);
             const blob = new Blob([bytes], { type: 'audio/wav' });
-            const url = URL.createObjectURL(blob);
+            const url  = URL.createObjectURL(blob);
             audioQueue.push({ url, index });
 
-            // Add audio player to the last assistant message
-            if (currentMsgDiv) {
-                let playerDiv = currentMsgDiv.querySelector('.audio-player');
-                if (!playerDiv) {
-                    playerDiv = document.createElement('div');
-                    playerDiv.className = 'audio-player';
-                    currentMsgDiv.appendChild(playerDiv);
-                }
-                const audio = document.createElement('audio');
-                audio.controls = true;
-                audio.preload = 'auto';
-                audio.src = url;
-                audio.style.width = '100%';
-                audio.style.height = '36px';
-                audio.style.borderRadius = '18px';
-                audio.style.marginTop = '6px';
-                playerDiv.appendChild(audio);
-            }
-
-            if (!isPlaying) playNextAudio();
+            if (!isPlaying) playNext();
         }
 
-        function playNextAudio() {
-            if (audioQueue.length === 0) { isPlaying = false; return; }
+        function playNext() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                if (appState === 'speaking') setState('idle');
+                return;
+            }
             isPlaying = true;
+            setState('speaking');
 
-            // Sort by index to maintain order
             audioQueue.sort((a, b) => a.index - b.index);
             const item = audioQueue.shift();
 
-            const audio = new Audio(item.url);
-            audio.onended = () => {
-                URL.revokeObjectURL(item.url);
-                playNextAudio();
-            };
-            audio.onerror = () => playNextAudio();
-            audio.play().catch(() => playNextAudio());
+            currentAudio = new Audio(item.url);
+            currentAudio.onended = () => { URL.revokeObjectURL(item.url); playNext(); };
+            currentAudio.onerror = () => playNext();
+            currentAudio.play().catch(() => playNext());
+        }
+
+        function stopPlayback() {
+            if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+            isPlaying = false;
+            audioQueue.forEach(a => URL.revokeObjectURL(a.url));
+            audioQueue = [];
         }
 
         function base64ToUint8(b64) {
@@ -418,133 +392,168 @@
             return arr;
         }
 
-        // ================= RECORDING =================
+        // ================= CONTINUOUS MIC =================
 
-        async function toggleRecording() {
-            if (!micAvailable || (ws && ws.readyState !== WebSocket.OPEN)) return;
-            if (isRecording) stopRecording();
-            else await startRecording();
-        }
-
-        async function startRecording() {
+        async function startContinuousMic() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             } catch (err) {
-                micAvailable = false;
-                micButton.classList.add('disabled');
-                micButton.onclick = null;
-                micLabel.textContent = 'Mic blocked';
-                setStatus('Mic unavailable - use upload', 'error');
+                addError('Microphone access denied. Please allow mic and reload.');
                 return;
             }
 
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-                mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
-                audioChunks = [];
+            audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+            const src = audioCtx.createMediaStreamSource(micStream);
+            analyser  = audioCtx.createAnalyser();
+            analyser.fftSize = FFT_SIZE;
+            src.connect(analyser);
 
-                mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+            // Always-on recorder
+            const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+            mediaRecorder = new MediaRecorder(micStream, { mimeType: mime });
 
-                mediaRecorder.onstop = async () => {
-                    const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-                    stream.getTracks().forEach(t => t.stop());
-                    await sendAudio(blob);
-                };
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) allChunks.push(e.data);
+            };
 
-                mediaRecorder.start(100);
-                isRecording = true;
-                micButton.classList.add('recording');
-                micLabel.textContent = 'Tap to stop';
-                waveform.classList.add('active');
-                startTimer();
-                setStatus('Listening...', 'busy');
-            } catch (err) {
-                stream.getTracks().forEach(t => t.stop());
-                addError('Recorder error: ' + err.message);
-            }
+            mediaRecorder.start(200); // 200ms timeslice
+
+            setState('idle');
+            monitorEnergy();
         }
 
-        function stopRecording() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-            isRecording = false;
-            micButton.classList.remove('recording');
-            micButton.classList.add('processing');
-            uploadBtn.classList.add('processing');
-            micLabel.textContent = 'Processing...';
-            waveform.classList.remove('active');
-            stopTimer();
+        function monitorEnergy() {
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            const SILENCE_WINDOW = 8;  // consecutive low-energy frames to confirm silence
+            let silenceCount = 0;
+
+            function tick() {
+                if (appState === 'init' || appState === 'processing') {
+                    requestAnimationFrame(tick);
+                    return;
+                }
+
+                analyser.getByteTimeDomainData(data);
+
+                // RMS energy
+                let sum = 0;
+                for (let i = 0; i < data.length; i++) {
+                    const v = (data[i] - 128) / 128;
+                    sum += v * v;
+                }
+                const rms = Math.sqrt(sum / data.length) * 255;
+
+                // Update energy ring visual
+                if (appState === 'recording') {
+                    const intensity = Math.min(rms / ENERGY_THRESHOLD, 2);
+                    energyRing.style.borderColor = `rgba(244,67,54,${0.15 + intensity * 0.2})`;
+                }
+
+                if (appState === 'speaking' && rms > ENERGY_THRESHOLD) {
+                    // Interrupt: user started speaking while assistant is talking
+                    interruptAndRecord();
+                    requestAnimationFrame(tick);
+                    return;
+                }
+
+                if (appState === 'idle' && rms > ENERGY_THRESHOLD) {
+                    // Speech onset
+                    speechStartIdx = allChunks.length;
+                    speechStartTime = Date.now();
+                    lastSpeechTime = Date.now();
+                    silenceCount = 0;
+                    setState('recording');
+                }
+
+                if (appState === 'recording') {
+                    if (rms > ENERGY_THRESHOLD) {
+                        lastSpeechTime = Date.now();
+                        silenceCount = 0;
+                    } else {
+                        silenceCount++;
+                    }
+
+                    if (Date.now() - lastSpeechTime > SILENCE_MS) {
+                        // Silence detected — end utterance
+                        const duration = Date.now() - speechStartTime;
+                        if (duration >= MIN_SPEECH_MS) {
+                            finishUtterance();
+                        } else {
+                            // Too short, discard
+                            setState('idle');
+                        }
+                    }
+                }
+
+                requestAnimationFrame(tick);
+            }
+
+            requestAnimationFrame(tick);
+        }
+
+        function interruptAndRecord() {
+            stopPlayback();
+            finalizeStreamingMessage();
+
+            // Discard any in-flight processing result
+            speechStartIdx = allChunks.length;
+            speechStartTime = Date.now();
+            lastSpeechTime = Date.now();
+            setState('recording');
+        }
+
+        function finishUtterance() {
+            if (speechStartIdx < 0 || speechStartIdx >= allChunks.length) {
+                setState('idle');
+                return;
+            }
+
+            const chunks = allChunks.slice(speechStartIdx);
+            speechStartIdx = -1;
+
+            if (chunks.length === 0) {
+                setState('idle');
+                return;
+            }
+
+            const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+
+            // Trim old chunks to keep memory low (keep last 2 seconds worth ≈ 10 chunks at 200ms)
+            if (allChunks.length > 20) {
+                allChunks = allChunks.slice(-10);
+            }
+
+            setState('processing');
             startTime = Date.now();
+            sendAudio(blob);
         }
 
-        // ================= FILE UPLOAD =================
-
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                uploadBtn.classList.add('processing');
-                micButton.classList.add('processing');
-                startTime = Date.now();
-                sendAudio(file);
-            }
-            fileInput.value = '';
-        });
-
-        // ================= SEND AUDIO VIA WS =================
+        // ================= SEND =================
 
         async function sendAudio(blob) {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                addError('WebSocket not connected');
-                resetButtons();
+                addError('Not connected');
+                setState('idle');
                 return;
             }
-
             try {
                 const buf = await blob.arrayBuffer();
                 ws.send(buf);
             } catch (err) {
                 addError('Send error: ' + err.message);
-                resetButtons();
+                setState('idle');
+            }
+        }
+
+        // ================= ORB CLICK =================
+
+        function onOrbClick() {
+            if (appState === 'speaking') {
+                interruptAndRecord();
             }
         }
 
         // ================= UI HELPERS =================
-
-        function setStatus(text, type = 'ok') {
-            statusText.textContent = text;
-            statusDot.className = 'status-dot';
-            if (type === 'error') statusDot.classList.add('error');
-            else if (type === 'busy') statusDot.classList.add('busy');
-        }
-
-        function setStage(text, active = false) {
-            stageIndicator.textContent = text;
-            stageIndicator.className = 'stage-indicator' + (active ? ' active' : '');
-        }
-
-        function startTimer() {
-            recordingStartTime = Date.now();
-            recordingTimer.classList.add('active');
-            timerInterval = setInterval(() => {
-                const el = (Date.now() - recordingStartTime) / 1000;
-                const m = Math.floor(el / 60);
-                const s = Math.floor(el % 60);
-                recordingTimer.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-            }, 100);
-        }
-
-        function stopTimer() {
-            clearInterval(timerInterval);
-            recordingTimer.classList.remove('active');
-            recordingTimer.textContent = '0:00';
-        }
-
-        function resetButtons() {
-            micButton.classList.remove('processing', 'recording');
-            uploadBtn.classList.remove('processing');
-            micLabel.textContent = micAvailable ? 'Tap to speak' : 'Mic blocked';
-            waveform.classList.remove('active');
-        }
 
         function createMessageShell(role) {
             const div = document.createElement('div');
@@ -555,15 +564,10 @@
             return div;
         }
 
-        function addMessage(role, text, audioUrl = null) {
+        function addMessage(role, text) {
             const div = document.createElement('div');
             div.className = `message ${role}`;
-            let html = `<div class="label">${role === 'user' ? 'You' : 'Assistant'}</div>`;
-            html += `<div class="text">${escapeHtml(text)}</div>`;
-            if (audioUrl) {
-                html += `<div class="audio-player"><audio controls preload="auto" src="${audioUrl}"></audio></div>`;
-            }
-            div.innerHTML = html;
+            div.innerHTML = `<div class="label">${role === 'user' ? 'You' : 'Assistant'}</div><div class="text">${escapeHtml(text)}</div>`;
             chatArea.appendChild(div);
             chatArea.scrollTop = chatArea.scrollHeight;
         }
@@ -573,12 +577,8 @@
             const last = msgs[msgs.length - 1];
             if (last) {
                 let el = last.querySelector('.latency');
-                if (!el) {
-                    el = document.createElement('div');
-                    el.className = 'latency';
-                    last.appendChild(el);
-                }
-                el.textContent = `${latency}s total`;
+                if (!el) { el = document.createElement('div'); el.className = 'latency'; last.appendChild(el); }
+                el.textContent = `${latency}s`;
             }
         }
 
@@ -598,6 +598,7 @@
 
         // ================= INIT =================
         connectWS();
+        startContinuousMic();
     </script>
 </body>
 </html>
