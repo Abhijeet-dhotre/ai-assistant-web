@@ -1,0 +1,6 @@
+flask
+faster-whisper
+requests
+uvicorn
+fastapi
+websockets

@@ -1,0 +1,5 @@
+mic_input/
+audio_responses/
+__pycache__/
+*.pyc
+.env
