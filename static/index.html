@@ -84,17 +84,13 @@
         .message .text { word-wrap: break-word; }
         .message .latency { font-size: 0.65rem; color: #555; margin-top: 4px; }
 
-        /* ---- Bottom bar ---- */
-
         .bottom-bar {
             width: 100%; max-width: 700px;
             display: flex; flex-direction: column; align-items: center;
             padding: 12px 20px 24px; gap: 10px;
         }
 
-        .controls-row {
-            display: flex; align-items: center; gap: 16px;
-        }
+        .controls-row { display: flex; align-items: center; gap: 16px; }
 
         .upload-btn {
             width: 40px; height: 40px; border-radius: 50%;
@@ -159,6 +155,14 @@
             animation: fadeSlideIn 0.3s ease;
         }
 
+        .debug-log {
+            background: #111; border: 1px solid #222; color: #4caf50;
+            padding: 8px 12px; border-radius: 8px;
+            font-size: 0.7rem; font-family: monospace;
+            max-height: 120px; overflow-y: auto;
+            width: 100%; max-width: 700px; margin: 0 20px;
+        }
+
         .welcome { text-align: center; padding: 50px 20px; color: #555; }
         .welcome .icon { font-size: 3.5rem; margin-bottom: 12px; }
         .welcome p { font-size: 0.9rem; line-height: 1.6; }
@@ -185,16 +189,17 @@
             <div class="welcome" id="welcomeMsg">
                 <div class="icon">&#127908;</div>
                 <p>Always listening. Just speak naturally.<br>
-                I'll hear you, think, and talk back.<br>
                 Click the orb while I'm speaking to interrupt.</p>
             </div>
         </div>
     </div>
 
+    <div class="debug-log" id="debugLog"></div>
+
     <div class="bottom-bar">
         <div class="status-label" id="statusLabel">Connecting...</div>
         <div class="controls-row">
-            <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()" title="Upload audio file">
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()" title="Upload audio">
                 &#128190;
             </button>
             <button class="mic-orb state-init" id="micOrb" onclick="onOrbClick()">
@@ -209,29 +214,25 @@
         const WS_PORT = 5051;
         const WS_URL  = `ws://${location.hostname}:${WS_PORT}/ws`;
 
-        const ENERGY_THRESHOLD = 0.015;  // RMS 0-1 for Float32 PCM
+        const ENERGY_THRESHOLD = 0.01;
         const SILENCE_MS       = 800;
-        const MIN_SPEECH_MS    = 400;
-        const BUFFER_SECS      = 1.5;   // pre-roll buffer seconds
+        const MIN_SPEECH_MS    = 300;
+        const BUFFER_SECS      = 1.5;
 
         // ================= STATE =================
         let appState = 'init';
-
         let ws = null;
         let audioCtx = null;
         let processor = null;
         let micStream = null;
+        let actualSampleRate = 16000;
 
-        const SAMPLE_RATE = 16000;
-
-        // Rolling buffer of Float32Array chunks (pre-roll)
         let allBuffers = [];
         let totalSamples = 0;
-
-        let speechStartIdx = -1;
+        let speechBuffers = [];  // collected during recording, separate from pre-roll
+        let isRecordingSpeech = false;
         let speechStartTime = 0;
         let lastSpeechTime = 0;
-        let silenceCount = 0;
 
         let audioQueue = [];
         let isPlaying = false;
@@ -247,8 +248,16 @@
         const wsBadge     = document.getElementById('wsBadge');
         const welcomeMsg  = document.getElementById('welcomeMsg');
         const fileInput   = document.getElementById('fileInput');
+        const debugLog    = document.getElementById('debugLog');
 
-        // ================= HELPERS =================
+        function log(msg) {
+            console.log('[VA]', msg);
+            const line = document.createElement('div');
+            line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+            debugLog.appendChild(line);
+            debugLog.scrollTop = debugLog.scrollHeight;
+            if (debugLog.children.length > 50) debugLog.removeChild(debugLog.firstChild);
+        }
 
         function setState(s) {
             appState = s;
@@ -265,11 +274,13 @@
             if (s === 'recording')  statusLabel.classList.add('recording');
             if (s === 'speaking')   statusLabel.classList.add('speaking');
             if (s === 'processing') statusLabel.classList.add('processing');
+            log('State -> ' + s);
         }
 
         function setWS(ok) {
             wsBadge.textContent = 'WS';
             wsBadge.className = 'ws-badge ' + (ok ? 'on' : 'off');
+            log(ok ? 'WS connected' : 'WS disconnected');
         }
 
         // ================= WAV ENCODER =================
@@ -279,8 +290,8 @@
             const buffer = new ArrayBuffer(44 + numSamples * 2);
             const view = new DataView(buffer);
 
-            function writeStr(off, s) {
-                for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+            function writeStr(o, s) {
+                for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i));
             }
 
             writeStr(0, 'RIFF');
@@ -322,11 +333,12 @@
             ws.binaryType = 'arraybuffer';
             ws.onopen  = () => setWS(true);
             ws.onclose = () => { setWS(false); setTimeout(connectWS, 3000); };
-            ws.onerror = () => {};
+            ws.onerror = () => log('WS error');
             ws.onmessage = (e) => handleWSMessage(JSON.parse(e.data));
         }
 
         function handleWSMessage(msg) {
+            log('<< ' + msg.type + (msg.message ? ': ' + msg.message : '') + (msg.text ? ': "' + msg.text.substring(0, 40) + '"' : ''));
             switch (msg.type) {
                 case 'status':
                     if (msg.stage === 'tts') statusLabel.textContent = msg.message;
@@ -392,8 +404,8 @@
             const item = audioQueue.shift();
             currentAudio = new Audio(item.url);
             currentAudio.onended = () => { URL.revokeObjectURL(item.url); playNext(); };
-            currentAudio.onerror = () => playNext();
-            currentAudio.play().catch(() => playNext());
+            currentAudio.onerror = () => { log('Audio play error'); playNext(); };
+            currentAudio.play().catch(e => { log('Audio play rejected: ' + e); playNext(); });
         }
 
         function stopPlayback() {
@@ -414,34 +426,38 @@
 
         async function startContinuousMic() {
             try {
-                micStream = await navigator.mediaDevices.getUserMedia({
-                    audio: { sampleRate: SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true }
-                });
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             } catch (err) {
-                addError('Microphone access denied. Allow mic and reload.');
+                addError('Microphone access denied: ' + err.message);
                 return;
             }
 
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-            const src = audioCtx.createMediaStreamSource(micStream);
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            actualSampleRate = audioCtx.sampleRate;
+            log('Actual sample rate: ' + actualSampleRate);
 
+            const src = audioCtx.createMediaStreamSource(micStream);
             const bufSize = 4096;
             processor = audioCtx.createScriptProcessor(bufSize, 1, 1);
 
-            let maxSamples = Math.floor(SAMPLE_RATE * BUFFER_SECS);
+            const maxSamples = Math.floor(actualSampleRate * BUFFER_SECS);
+            let frameCount = 0;
 
             processor.onaudioprocess = (e) => {
                 const input = e.inputBuffer.getChannelData(0);
                 const buf = new Float32Array(input);
 
-                // Always keep pre-roll
-                allBuffers.push(buf);
-                totalSamples += buf.length;
-
-                // Trim pre-roll to BUFFER_SECS
-                while (totalSamples > maxSamples && allBuffers.length > 1) {
-                    totalSamples -= allBuffers[0].length;
-                    allBuffers.shift();
+                // Pre-roll buffer (only keep when not recording)
+                if (!isRecordingSpeech) {
+                    allBuffers.push(buf);
+                    totalSamples += buf.length;
+                    while (totalSamples > maxSamples && allBuffers.length > 1) {
+                        totalSamples -= allBuffers[0].length;
+                        allBuffers.shift();
+                    }
+                } else {
+                    // During recording, collect into speech buffer
+                    speechBuffers.push(buf);
                 }
 
                 // Energy
@@ -449,69 +465,72 @@
                 for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
                 const rms = Math.sqrt(sum / buf.length);
 
-                // Interrupt detection
+                frameCount++;
+                if (frameCount % 100 === 0) {
+                    log('Energy: ' + rms.toFixed(4) + ' state=' + appState + ' speechBufs=' + speechBuffers.length);
+                }
+
                 if (appState === 'speaking' && rms > ENERGY_THRESHOLD) {
                     interruptAndRecord();
                     return;
                 }
 
-                // Start recording
                 if (appState === 'idle' && rms > ENERGY_THRESHOLD) {
-                    speechStartIdx = allBuffers.length;
+                    // Start recording: include last pre-roll buffer as onset
+                    speechBuffers = [buf];
+                    isRecordingSpeech = true;
                     speechStartTime = Date.now();
                     lastSpeechTime = Date.now();
-                    silenceCount = 0;
                     setState('recording');
+                    log('Speech start');
                 }
 
-                // During recording
                 if (appState === 'recording') {
                     if (rms > ENERGY_THRESHOLD) {
                         lastSpeechTime = Date.now();
-                        silenceCount = 0;
-                    } else {
-                        silenceCount++;
                     }
 
                     if (Date.now() - lastSpeechTime > SILENCE_MS) {
-                        if (Date.now() - speechStartTime >= MIN_SPEECH_MS) {
+                        const dur = Date.now() - speechStartTime;
+                        if (dur >= MIN_SPEECH_MS) {
+                            log('Speech end, duration=' + dur + 'ms, bufs=' + speechBuffers.length);
                             finishUtterance();
                         } else {
-                            speechStartIdx = -1;
+                            log('Speech too short (' + dur + 'ms), ignored');
+                            isRecordingSpeech = false;
+                            speechBuffers = [];
                             setState('idle');
                         }
                     }
                 }
             };
 
-            // Connect: mic -> processor -> destination (needs connection for callback to fire)
             src.connect(processor);
-            processor.connect(audioCtx.destination);
+            // Chrome needs destination connection for script processor to fire
+            const silentGain = audioCtx.createGain();
+            silentGain.gain.value = 0;
+            processor.connect(silentGain);
+            silentGain.connect(audioCtx.destination);
 
             setState('idle');
+            log('Mic started, listening');
         }
 
         function interruptAndRecord() {
+            log('Interrupt!');
             stopPlayback();
             finalizeStreamingMessage();
-            // Clear buffer, start fresh
             allBuffers = [];
             totalSamples = 0;
-            speechStartIdx = 0;
+            speechBuffers = [];
+            isRecordingSpeech = true;
             speechStartTime = Date.now();
             lastSpeechTime = Date.now();
-            silenceCount = 0;
             setState('recording');
         }
 
         function finishUtterance() {
-            if (speechStartIdx < 0 || speechStartIdx >= allBuffers.length) {
-                setState('idle');
-                return;
-            }
-
-            const speechBuffers = allBuffers.slice(speechStartIdx);
-            speechStartIdx = -1;
+            isRecordingSpeech = false;
 
             if (speechBuffers.length === 0) {
                 setState('idle');
@@ -519,20 +538,19 @@
             }
 
             const pcm = concatBuffers(speechBuffers);
-            const wav = encodeWAV(pcm, SAMPLE_RATE);
-
-            // Keep a small pre-roll for next utterance
-            const keep = Math.min(3, allBuffers.length);
-            allBuffers = allBuffers.slice(-keep);
+            speechBuffers = [];
+            allBuffers = [];
             totalSamples = 0;
-            for (const b of allBuffers) totalSamples += b.length;
+
+            log('Sending ' + pcm.length + ' samples (' + (pcm.length / actualSampleRate).toFixed(2) + 's) at ' + actualSampleRate + 'Hz');
+
+            const wav = encodeWAV(pcm, actualSampleRate);
+            log('WAV size: ' + wav.size + ' bytes');
 
             setState('processing');
             startTime = Date.now();
             sendWav(wav);
         }
-
-        // ================= SEND =================
 
         async function sendWav(blob) {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -543,6 +561,7 @@
             try {
                 const buf = await blob.arrayBuffer();
                 ws.send(buf);
+                log('Sent ' + buf.byteLength + ' bytes');
             } catch (err) {
                 addError('Send error: ' + err.message);
                 setState('idle');
@@ -556,11 +575,7 @@
             if (!file) return;
             fileInput.value = '';
 
-            if (appState === 'speaking') {
-                stopPlayback();
-                finalizeStreamingMessage();
-            }
-
+            if (appState === 'speaking') { stopPlayback(); finalizeStreamingMessage(); }
             setState('processing');
             startTime = Date.now();
 
@@ -571,14 +586,13 @@
                 if (file.name.endsWith('.wav')) {
                     wavBlob = file;
                 } else {
-                    // Decode to PCM then re-encode as WAV
-                    const tmpCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+                    const tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
                     const audioBuf = await tmpCtx.decodeAudioData(arrayBuf);
                     const pcm = audioBuf.getChannelData(0);
-                    wavBlob = encodeWAV(pcm, SAMPLE_RATE);
+                    wavBlob = encodeWAV(pcm, tmpCtx.sampleRate);
                     tmpCtx.close();
                 }
-
+                log('Uploading ' + file.name + ' (' + wavBlob.size + ' bytes)');
                 await sendWav(wavBlob);
             } catch (err) {
                 addError('File error: ' + err.message);
@@ -628,6 +642,7 @@
         }
 
         function addError(text) {
+            log('ERROR: ' + text);
             const div = document.createElement('div');
             div.className = 'error-message';
             div.textContent = text;
